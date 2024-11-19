@@ -10,12 +10,12 @@ Original file is located at
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-import matplotlib.pyplot as plt
+from sklearn.metrics import accuracy_score
 import seaborn as sns
+import matplotlib.pyplot as plt
 
 # ฟังก์ชันสำหรับโหลดข้อมูล
 @st.cache
@@ -23,44 +23,33 @@ def load_data(file):
     df = pd.read_csv(file)
     return df
 
-# ฟังก์ชันสำหรับ Train และ Evaluate โมเดล
-def train_and_evaluate(df):
-    X = df[['R', 'G', 'B']]
+# ฟังก์ชันสำหรับ Train โมเดล
+def train_model(df):
+    X = df[['R', 'G', 'B']] / 255.0  # Normalize RGB
     y = df['season']
 
     # แปลง Labels เป็นตัวเลข
     label_encoder = LabelEncoder()
     y_encoded = label_encoder.fit_transform(y)
 
-    # แบ่งข้อมูล Train, Validation, Test
-    X_train, X_temp, y_train, y_temp = train_test_split(X, y_encoded, test_size=0.3, random_state=42)
-    X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
+    # แบ่งข้อมูล Train, Test
+    X_train, X_test, y_train, y_test = train_test_split(X, y_encoded, test_size=0.3, random_state=42)
 
     # ปรับขนาดข้อมูล
     scaler = StandardScaler()
     X_train = scaler.fit_transform(X_train)
-    X_val = scaler.transform(X_val)
     X_test = scaler.transform(X_test)
 
     # สร้างโมเดล SVM และ Train
     svm_model = SVC(kernel='rbf', C=1.0, gamma='scale', random_state=42)
     svm_model.fit(X_train, y_train)
 
-    # Evaluate บน Validation Set
-    y_val_pred = svm_model.predict(X_val)
-    val_accuracy = accuracy_score(y_val, y_val_pred)
-
-    # Evaluate บน Test Set
-    y_test_pred = svm_model.predict(X_test)
-    test_accuracy = accuracy_score(y_test, y_test_pred)
-    conf_matrix = confusion_matrix(y_test, y_test_pred)
-
-    return val_accuracy, test_accuracy, conf_matrix, label_encoder.classes_
+    return svm_model, scaler, label_encoder
 
 # ส่วน UI หลักของ Streamlit
 def main():
-    st.title("Personal Color Classifier")
-    st.write("Upload your dataset to train and evaluate the SVM model.")
+    st.title("Color to Season Classifier")
+    st.write("Train the model using a dataset and then predict the season for a specific RGB color.")
 
     # อัปโหลดไฟล์ CSV
     uploaded_file = st.file_uploader("Upload a CSV file", type="csv")
@@ -71,21 +60,33 @@ def main():
         st.write("Dataset Preview:")
         st.dataframe(df.head())
 
-        if st.button("Train and Evaluate Model"):
+        # ตรวจสอบคอลัมน์ที่ต้องการ
+        required_columns = {'R', 'G', 'B', 'season'}
+        if not required_columns.issubset(df.columns):
+            st.error(f"The uploaded file must contain the following columns: {', '.join(required_columns)}")
+            return
+
+        if st.button("Train Model"):
             st.write("Training the model...")
-            val_accuracy, test_accuracy, conf_matrix, class_labels = train_and_evaluate(df)
+            svm_model, scaler, label_encoder = train_model(df)
+            st.success("Model training completed!")
 
-            st.write(f"Validation Accuracy: {val_accuracy:.2f}")
-            st.write(f"Test Accuracy: {test_accuracy:.2f}")
+            # รับค่า RGB จากผู้ใช้
+            st.write("Enter RGB values to predict the season:")
+            r = st.number_input("Red (R)", min_value=0, max_value=255, value=128)
+            g = st.number_input("Green (G)", min_value=0, max_value=255, value=128)
+            b = st.number_input("Blue (B)", min_value=0, max_value=255, value=128)
 
-            # Confusion Matrix Visualization
-            st.write("Confusion Matrix:")
-            fig, ax = plt.subplots()
-            sns.heatmap(conf_matrix, annot=True, cmap='Blues', xticklabels=class_labels, yticklabels=class_labels, ax=ax)
-            plt.xlabel("Predicted")
-            plt.ylabel("Actual")
-            plt.title("Confusion Matrix")
-            st.pyplot(fig)
+            if st.button("Predict Season"):
+                # เตรียมข้อมูล RGB สำหรับพยากรณ์
+                rgb_input = np.array([[r, g, b]]) / 255.0  # Normalize
+                rgb_input = scaler.transform(rgb_input)  # Scale
+
+                # ทำนายผล
+                prediction = svm_model.predict(rgb_input)
+                predicted_season = label_encoder.inverse_transform(prediction)[0]
+
+                st.write(f"The predicted season for RGB ({r}, {g}, {b}) is **{predicted_season}**.")
 
 if __name__ == "__main__":
     main()
