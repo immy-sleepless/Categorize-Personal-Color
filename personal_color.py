@@ -121,6 +121,43 @@ plt.ylabel("Actual")
 plt.title("Confusion Matrix")
 plt.show()
 
+# แบ่งข้อมูล Train, Validation, และ Test
+X_train, X_temp, y_train, y_temp = train_test_split(X, y_encoded, test_size=0.3, random_state=42)
+X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
+
+# ปรับขนาดข้อมูล
+scaler = StandardScaler()
+X_train = scaler.fit_transform(X_train)
+X_val = scaler.transform(X_val)
+X_test = scaler.transform(X_test)
+
+# สร้างและเทรนโมเดล
+svm_model = SVC(kernel='rbf', C=1.0, gamma='scale', random_state=42)
+svm_model.fit(X_train, y_train)
+
+# ประเมินผลด้วย Validation Set
+y_val_pred = svm_model.predict(X_val)
+val_accuracy = accuracy_score(y_val, y_val_pred)
+print(f"Validation Accuracy: {val_accuracy:.2f}")
+
+# ประเมินผลด้วย Test Set
+y_test_pred = svm_model.predict(X_test)
+test_accuracy = accuracy_score(y_test, y_test_pred)
+print(f"Test Accuracy: {test_accuracy:.2f}")
+
+# Classification Report สำหรับ Test Set
+print("\nClassification Report (Test Set):")
+print(classification_report(y_test, y_test_pred, target_names=label_encoder.classes_))
+
+# Confusion Matrix สำหรับ Test Set
+conf_matrix_test = confusion_matrix(y_test, y_test_pred)
+plt.figure(figsize=(8, 6))
+sns.heatmap(conf_matrix_test, annot=True, cmap='Blues', xticklabels=label_encoder.classes_, yticklabels=label_encoder.classes_)
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.title("Confusion Matrix (Test Set)")
+plt.show()
+
 from sklearn.model_selection import GridSearchCV
 
 param_grid = {

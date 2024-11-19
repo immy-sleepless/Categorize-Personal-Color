@@ -12,53 +12,59 @@ Original file is located at
 import streamlit as st
 import pandas as pd
 import numpy as np
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.svm import SVC
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# ฟังก์ชันสำหรับการโหลดและประมวลผลข้อมูล
+# ฟังก์ชันสำหรับโหลดข้อมูล
 @st.cache
 def load_data(file):
     df = pd.read_csv(file)
     return df
 
-# ฟังก์ชันสำหรับการสร้างโมเดล SVM
-def train_svm_model(df):
-    X = df[['R', 'G', 'B']]   # Features
-    y = df['season']          # Labels
+# ฟังก์ชันสำหรับ Train และ Evaluate โมเดล
+def train_and_evaluate(df):
+    X = df[['R', 'G', 'B']]
+    y = df['season']
 
-    # แปลง Labels (season) เป็นตัวเลข
+    # แปลง Labels เป็นตัวเลข
     label_encoder = LabelEncoder()
     y_encoded = label_encoder.fit_transform(y)
 
-    # Train-Test Split
-    X_train, X_test, y_train, y_test = train_test_split(X, y_encoded, test_size=0.2, random_state=42)
+    # แบ่งข้อมูล Train, Validation, Test
+    X_train, X_temp, y_train, y_temp = train_test_split(X, y_encoded, test_size=0.3, random_state=42)
+    X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
 
     # ปรับขนาดข้อมูล
     scaler = StandardScaler()
     X_train = scaler.fit_transform(X_train)
+    X_val = scaler.transform(X_val)
     X_test = scaler.transform(X_test)
 
-    # สร้างโมเดล SVM
+    # สร้างโมเดล SVM และ Train
     svm_model = SVC(kernel='rbf', C=1.0, gamma='scale', random_state=42)
     svm_model.fit(X_train, y_train)
 
-    # ประเมินผลโมเดล
-    y_pred = svm_model.predict(X_test)
-    accuracy = accuracy_score(y_test, y_pred)
-    conf_matrix = confusion_matrix(y_test, y_pred)
+    # Evaluate บน Validation Set
+    y_val_pred = svm_model.predict(X_val)
+    val_accuracy = accuracy_score(y_val, y_val_pred)
 
-    return accuracy, conf_matrix, label_encoder.classes_
+    # Evaluate บน Test Set
+    y_test_pred = svm_model.predict(X_test)
+    test_accuracy = accuracy_score(y_test, y_test_pred)
+    conf_matrix = confusion_matrix(y_test, y_test_pred)
+
+    return val_accuracy, test_accuracy, conf_matrix, label_encoder.classes_
 
 # ส่วน UI หลักของ Streamlit
 def main():
-    st.title("Personal Color Classification")
-    st.write("Upload your color dataset and train an SVM model for classification.")
+    st.title("Personal Color Classifier")
+    st.write("Upload your dataset to train and evaluate the SVM model.")
 
-    # อัปโหลดไฟล์
+    # อัปโหลดไฟล์ CSV
     uploaded_file = st.file_uploader("Upload a CSV file", type="csv")
 
     if uploaded_file is not None:
@@ -67,13 +73,14 @@ def main():
         st.write("Dataset Preview:")
         st.dataframe(df.head())
 
-        if st.button("Train Model"):
-            st.write("Training the SVM model...")
-            accuracy, conf_matrix, class_labels = train_svm_model(df)
+        if st.button("Train and Evaluate Model"):
+            st.write("Training the model...")
+            val_accuracy, test_accuracy, conf_matrix, class_labels = train_and_evaluate(df)
 
-            st.write(f"Model Accuracy: {accuracy:.2f}")
+            st.write(f"Validation Accuracy: {val_accuracy:.2f}")
+            st.write(f"Test Accuracy: {test_accuracy:.2f}")
 
-            # แสดง Confusion Matrix
+            # Confusion Matrix Visualization
             st.write("Confusion Matrix:")
             fig, ax = plt.subplots()
             sns.heatmap(conf_matrix, annot=True, cmap='Blues', xticklabels=class_labels, yticklabels=class_labels, ax=ax)
