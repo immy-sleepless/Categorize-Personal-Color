@@ -14,14 +14,10 @@ from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.metrics import accuracy_score
-import seaborn as sns
-import matplotlib.pyplot as plt
 
-# ฟังก์ชันสำหรับโหลดข้อมูล
-@st.cache
-def load_data(file):
-    df = pd.read_csv(file)
-    return df
+# ฟังก์ชันสำหรับโหลดข้อมูลจากไฟล์คงที่
+def load_fixed_data():
+    return pd.read_csv("color.csv")
 
 # ฟังก์ชันสำหรับ Train โมเดล
 def train_model(df):
@@ -44,49 +40,42 @@ def train_model(df):
     svm_model = SVC(kernel='rbf', C=1.0, gamma='scale', random_state=42)
     svm_model.fit(X_train, y_train)
 
-    return svm_model, scaler, label_encoder
+    # คำนวณ Accuracy บน Test Set
+    y_test_pred = svm_model.predict(X_test)
+    test_accuracy = accuracy_score(y_test, y_test_pred)
+
+    return svm_model, scaler, label_encoder, test_accuracy
 
 # ส่วน UI หลักของ Streamlit
 def main():
     st.title("Color to Season Classifier")
-    st.write("Train the model using a dataset and then predict the season for a specific RGB color.")
+    st.write("This app predicts the season based on an RGB color value using a pre-trained model.")
 
-    # อัปโหลดไฟล์ CSV
-    uploaded_file = st.file_uploader("Upload a CSV file", type="csv")
+    # โหลดข้อมูลจากไฟล์ color.csv
+    st.write("Loading dataset...")
+    df = load_fixed_data()
 
-    if uploaded_file is not None:
-        # โหลดข้อมูล
-        df = load_data(uploaded_file)
-        st.write("Dataset Preview:")
-        st.dataframe(df.head())
+    # เทรนโมเดลด้วยข้อมูลจากไฟล์
+    st.write("Training the model...")
+    svm_model, scaler, label_encoder, test_accuracy = train_model(df)
+    st.success(f"Model training completed! Test Set Accuracy: {test_accuracy:.2f}")
 
-        # ตรวจสอบคอลัมน์ที่ต้องการ
-        required_columns = {'R', 'G', 'B', 'season'}
-        if not required_columns.issubset(df.columns):
-            st.error(f"The uploaded file must contain the following columns: {', '.join(required_columns)}")
-            return
+    # รับค่า RGB จากผู้ใช้
+    st.write("Enter RGB values to predict the season:")
+    r = st.number_input("Red (R)", min_value=0, max_value=255, value=128)
+    g = st.number_input("Green (G)", min_value=0, max_value=255, value=128)
+    b = st.number_input("Blue (B)", min_value=0, max_value=255, value=128)
 
-        if st.button("Train Model"):
-            st.write("Training the model...")
-            svm_model, scaler, label_encoder = train_model(df)
-            st.success("Model training completed!")
+    if st.button("Predict Season"):
+        # เตรียมข้อมูล RGB สำหรับพยากรณ์
+        rgb_input = np.array([[r, g, b]]) / 255.0  # Normalize
+        rgb_input = scaler.transform(rgb_input)  # Scale
 
-            # รับค่า RGB จากผู้ใช้
-            st.write("Enter RGB values to predict the season:")
-            r = st.number_input("Red (R)", min_value=0, max_value=255, value=128)
-            g = st.number_input("Green (G)", min_value=0, max_value=255, value=128)
-            b = st.number_input("Blue (B)", min_value=0, max_value=255, value=128)
+        # ทำนายผล
+        prediction = svm_model.predict(rgb_input)
+        predicted_season = label_encoder.inverse_transform(prediction)[0]
 
-            if st.button("Predict Season"):
-                # เตรียมข้อมูล RGB สำหรับพยากรณ์
-                rgb_input = np.array([[r, g, b]]) / 255.0  # Normalize
-                rgb_input = scaler.transform(rgb_input)  # Scale
-
-                # ทำนายผล
-                prediction = svm_model.predict(rgb_input)
-                predicted_season = label_encoder.inverse_transform(prediction)[0]
-
-                st.write(f"The predicted season for RGB ({r}, {g}, {b}) is **{predicted_season}**.")
+        st.write(f"The predicted season for RGB ({r}, {g}, {b}) is **{predicted_season}**.")
 
 if __name__ == "__main__":
     main()
